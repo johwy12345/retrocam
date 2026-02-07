@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📷 RetroCam • POLAROID SX-70</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: radial-gradient(circle at center, #2c1810 0%, #1a0f0b 100%);
+            color: #f4e8c1; min-height: 100vh; overflow: hidden;
+        }
+        .container { 
+            max-width: 400px; margin: 0 auto; padding: 20px; 
+            background: rgba(0,0,0,0.8); border-radius: 20px; box-shadow: 0 20px 40px rgba(0,0,0,0.9);
+            border: 4px solid #3c2f1f; /* Borde retro para simular marco Polaroid */
+        }
+        .header { text-align: center; margin-bottom: 30px; }
+        .title { font-size: 1.8em; color: #d4a574; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        .subtitle { color: #8b7355; font-size: 0.9em; margin-top: 5px; }
+        .photo-frame {
+            position: relative;
+            width: 100%; height: 300px;
+            border: 12px solid #f4e8c1; /* Borde blanco para simular Polaroid */
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            background: #1a1a1a;
+            margin: 20px 0;
+        }
+        .photo-frame::before {
+            content: '';
+            position: absolute;
+            top: -10px; left: -10px; right: -10px; bottom: -10px;
+            border: 2px solid #3c2f1f;
+            border-radius: 20px;
+            z-index: -1;
+        }
+        #video, #canvas { 
+            width: 100%; height: 100%; 
+            border-radius: 10px; 
+            display: block;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+        .controls { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin: 20px 0; }
+        button {
+            padding: 12px 20px; background: linear-gradient(145deg, #d4a574, #b8935f);
+            border: none; border-radius: 8px; color: #1a0f0b; font-weight: bold;
+            cursor: pointer; font-family: inherit; font-size: 0.9em;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3); transition: all 0.2s;
+            min-height: 44px; /* Accesibilidad táctil */
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.4); }
+        button:active { transform: translateY(0); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        button:focus { outline: 2px solid #d4a574; } /* Accesibilidad */
+        .preset { background: linear-gradient(145deg, #8b7355, #6b5a3d); color: #f4e8c1; }
+        .settings { 
+            background: rgba(60,47,31,0.8); padding: 15px; border-radius: 10px; margin: 15px 0;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.8em;
+            border: 2px solid #3c2f1f; /* Borde retro */
+        }
+        .setting { text-align: center; }
+        .setting label { display: block; margin-bottom: 5px; color: #d4a574; }
+        .setting input { width: 100%; height: 30px; }
+        .philosophy { 
+            font-style: italic; font-size: 0.75em; color: #8b7355; 
+            text-align: center; margin-top: 20px; line-height: 1.4;
+            border-top: 1px solid rgba(139,115,85,0.3); padding-top: 15px;
+        }
+        .error { color: #ff4444; background: rgba(255,68,68,0.2); padding: 10px; border-radius: 8px; margin: 10px 0; }
+        .status { text-align: center; margin: 10px 0; font-size: 0.9em; color: #ffaa00; role: "status"; aria-live: "polite"; }
+        /* Ocultar elementos no esenciales para mantener esencia minimalista */
+        #savePresetBtn { display: none; } /* Opcional: mostrar solo si se necesita */
+        .loading { display: none; text-align: center; color: #ffaa00; font-size: 1.2em; }
+        @media (max-width: 480px) {
+            .container { margin: 10px; padding: 15px; }
+            .title { font-size: 1.5em; }
+            .photo-frame { height: 250px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">📷 RetroCam</div>
+            <div class="subtitle">POLAROID SX-70 • EST. 2026</div>
+        </div>
+        
+        <div class="photo-frame">
+            <video id="video" autoplay playsinline muted aria-label="Vista previa de la cámara"></video>
+            <canvas id="canvas" style="display:none;" aria-label="Imagen capturada con filtro retro"></canvas>
+        </div>
+        
+        <div id="status" class="status" style="display:none;">snapshot</div>
+        <div id="loading" class="loading">🔄 Procesando...</div>
+        
+        <div class="controls">
+            <button id="startBtn" aria-label="Iniciar cámara">▶ Start Camera</button>
+            <button id="captureBtn" disabled aria-label="Capturar imagen">📸 Capture</button>
+            <button id="downloadBtn" disabled aria-label="Descargar imagen">⬇ Download</button>
+            <button id="newShotBtn" disabled aria-label="Nueva captura">🔄 New Shot</button>
+        </div>
+        
+        <button id="presetBtn" class="preset" aria-label="Cargar preset Polaroid">🎞️ Preset: Polaroid SX-70</button>
+        
+        <div class="settings">
+            <div class="setting">
+                <label for="exposure">Exposición</label>
+                <input type="range" id="exposure" min="-1" max="1" step="0.1" value="0.3" aria-describedby="exposureVal">
+                <span id="exposureVal">+30%</span>
+            </div>
+            <div class="setting">
+                <label for="contrast">Contraste</label>
+                <input type="range" id="contrast" min="-1" max="1" step="0.1" value="-0.2" aria-describedby="contrastVal">
+                <span id="contrastVal">-20%</span>
+            </div>
+            <div class="setting">
+                <label for="saturation">Saturación</label>
+                <input type="range" id="saturation" min="-1" max="1" step="0.1" value="-0.15" aria-describedby="saturationVal">
+                <span id="saturationVal">-15%</span>
+            </div>
+            <div class="setting">
+                <label for="temperature">Temperatura</label>
+                <input type="range" id="temperature" min="-300" max="300" step="50" value="300" aria-describedby="temperatureVal">
+                <span id="temperatureVal">+300K</span>
+            </div>
+            <div class="setting">
+                <label for="grain">Grano</label>
+                <input type="range" id="grain" min="0" max="1" step="0.1" value="0.3" aria-describedby="grainVal">
+                <span id="grainVal">30%</span>
+            </div>
+            <div class="setting">
+                <label for="vignette">Viñeta</label>
+                <input type="range" id="vignette" min="0" max="1" step="0.1" value="0.5" aria-describedby="vignetteVal">
+                <span id="vignetteVal">50%</span>
+            </div>
+        </div>
+        
+        <div class="philosophy">
+            We don't seek perfection. We seek beautiful imperfection.<br>
+            <small>The SX-70 had contrast issues and burned highlights. That's the style.</small>
+        </div>
+    </div>
+
+    <script>
+        // Polyfill básico para getUserMedia si es necesario
+        if (!navigator.mediaDevices) {
+            navigator.mediaDevices = {};
+        }
+        if (!navigator.mediaDevices.getUserMedia) {
+            navigator.mediaDevices.getUserMedia = function(constraints) {
+                const getUserMedia = navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+                if (!getUserMedia) {
+                    return Promise.reject(new Error('getUserMedia is not implemented in this browser'));
+                }
+                return new Promise((resolve, reject) => {
+                    getUserMedia.call(navigator, constraints, resolve, reject);
+                });
+            };
+        }
+
+        class RetroCam {
+            constructor() {
+                this.video = document.getElementById('video');
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.stream = null;
+                this.settings = {
+                    exposure: 0.3, contrast: -0.2, saturation: -0.15,
+                    temperature: 300, grain: 0.3, vignette: 0.5
+                };
+                this.liveCanvas = document.createElement('canvas'); // Para filtros en vivo
+                this.liveCtx = this.liveCanvas.getContext('2d');
+                this.debouncedUpdate = this.debounce(this.updateLiveFilter, 200); // Debounce para sliders
+                
+                this.init();
+            }
+            
+            init() {
+                this.bindEvents();
+                this.loadSavedPreset();
+                this.checkCameraPermission();
+            }
+            
+            bindEvents() {
+                document.getElementById('startBtn').onclick = () => this.startCamera();
+                document.getElementById('captureBtn').onclick = () => this.capture();
+                document.getElementById('downloadBtn').onclick = () => this.download();
+                document.getElementById('newShotBtn').onclick = () => this.newShot();
+                document.getElementById('presetBtn').onclick = () => this.loadPreset();
+                
+                ['exposure','contrast','saturation','temperature','grain','vignette'].forEach(id => {
+                    document.getElementById(id).oninput = (e) => {
+                        this.settings[id] = parseFloat(e.target.value);
+                        this.updateSliderLabels();
+                        this.debouncedUpdate(); // Actualiza filtro en vivo
+                    };
+                });
+                
+                // Atajos de teclado
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && !document.getElementById('captureBtn').disabled) {
+                        this.capture();
+                    }
+                });
+            }
+            
+            debounce(func, wait) {
+                let timeout;
+                return function executedFunction(...args) {
+                    const later = () => {
+                        clearTimeout(timeout);
+                        func(...args);
+                    };
+                    clearTimeout(timeout);
+                    timeout = setTimeout(later, wait);
+                };
+            }
+            
+            async checkCameraPermission() {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    this.showError('❌ Tu navegador no soporta cámara');
+                    return;
+                }
+                
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    stream.getTracks().forEach(track => track.stop());
+                    this.showStatus('✅ Cámara lista');
+                } catch (err) {
+                    console.error('Camera check failed:', err);
+                    this.showError(`⚠️ Cámara bloqueada<br>
+                        1. Dale permisos cuando pida<br>
+                        2. Usa Chrome/Firefox<br>
+                        3. HTTPS requerido (Netlify OK)`);
+                }
+            }
+            
+            async startCamera() {
+                try {
+                    this.showStatus('🔄 Iniciando cámara...');
+                    
+                    this.stream = await navigator.mediaDevices.getUserMedia({
+                        video: { 
+                            width: { ideal: 640 }, // Optimizado para móviles
+                            height: { ideal: 480 },
+                            facingMode: 'environment'
+                        }
+                    });
+                    
+                    this.video.srcObject = this.stream;
+                    await this.video.play();
+                    
+                    document.getElementById('startBtn').style.display = 'none';
+                    document.getElementById('captureBtn').disabled = false;
+                    this.showStatus('📷 ¡Listo para capturar!');
+                    
+                    // Inicia filtros en vivo
+                    this.liveCanvas.width = this.video.videoWidth;
+                    this.liveCanvas.height = this.video.videoHeight;
+                    this.updateLiveFilter();
+                    
+                } catch (err) {
+                    console.error('Camera start error:', err);
+                    this.showError(`❌ Error: ${err.name || err.message}<br>
+                        Revisa permisos y usa HTTPS`);
+                }
+            }
+            
+            updateLiveFilter() {
+                if (!this.stream) return;
+                this.liveCtx.drawImage(this.video, 0, 0);
+                let imageData = this.liveCtx.getImageData(0, 0, this.liveCanvas.width, this.liveCanvas.height);
+                imageData = this.applyRetroFilter(imageData);
+                this.liveCtx.putImageData(imageData, 0, 0);
+                // Dibuja en el video (overlay)
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.drawImage(this.liveCanvas, 0, 0, this.canvas.width, this.canvas.height);
+                this.video.style.display = 'none';
+                this.canvas.style.display = 'block';
+                requestAnimationFrame(() => this.updateLiveFilter()); // Loop para en vivo
+            }
+            
+            capture() {
+                this.showLoading(true);
+                setTimeout(() => { // Simula procesamiento
+                    this.canvas.width = this.video.videoWidth;
+                    this.canvas.height = this.video.videoHeight;
+                    this.ctx.drawImage(this.video, 0, 0);
+                    
+                    let imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                    imageData = this.applyRetroFilter(imageData);
+                    this.ctx.putImageData(imageData, 0, 0);
+                    
+                    this.video.style.display = 'none';
+                    this.canvas.style.display = 'block';
+                    
+                    document.getElementById('captureBtn').disabled = true;
+                    document.getElementById('downloadBtn').disabled = false;
+                    document.getElementById('newShotBtn').disabled = false;
+                    this.showLoading(false);
+                    this.showStatus('✨ ¡Foto Polaroid lista!');
+                }, 500);
+            }
+            
+            applyRetroFilter(imageData) {
+                const data = imageData.data;
+                const chunkSize = 10000; // Procesamiento en chunks para rendimiento
+                for (let start = 0; start < data.length; start += chunkSize * 4) {
+                    const end = Math.min(start + chunkSize * 4, data.length);
+                    for (let i = start; i < end; i += 4) {
+                        let r = data[i], g = data[i+1], b = data[i+2];
+                        
+                        // Exposición
+                        r *= (1 + this.settings.exposure);
+                        g *= (1 + this.settings.exposure);
+                        b *= (1 + this.settings.exposure);
+                        
+                        // Contraste
+                        r = ((r / 255 - 0.5) * (1 + this.settings.contrast) + 0.5) * 255;
+                        g = ((g / 255 - 0.5) * (1 + this.settings.contrast) + 0.5) * 255;
+                        b = ((b / 255 - 0.5) * (1 + this.settings.contrast) + 0.5) * 255;
+                        
+                        // Saturación
+                        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+                        r = gray + this.settings.saturation * (r - gray);
+                        g = gray + this.settings.saturation * (g - gray);
+                        b = gray + this.settings.saturation * (b - gray);
+                        
+                        // Temperatura
+                        r += Math.abs(this.settings.temperature) * 0.8;
+                        b -= Math.abs(this.settings.temperature) * 0.5;
+                        
+                        data[i] = Math.max(0, Math.min(255, r));
+                        data[i+1] = Math.max(0, Math.min(255, g));
+                        data[i+2] = Math.max(0, Math.min(255, b));
+                    }
+                }
+                
+                this.addGrainAndVignette();
+                return imageData;
+            }
+            
+            addGrainAndVignette() {
+                const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
+                const data = imageData.data;
+                
+                // Grano
+                for (let i = 0; i < data.length; i += 4) {
+                    const grain = (Math.random() - 0.5) * 51 * this.settings.grain;
+                    data[i] = Math.max(0, Math.min(255, data[i] + grain));
+                    data[i+1] = Math.max(0, Math.min(255, data[i+1] + grain));
+                    data[i+2] = Math.max(0, Math.min(255, data[i+2] + grain));
+                }
+                
+                // Viñeta
+                for (let y = 0; y < this.canvas.height; y++) {
